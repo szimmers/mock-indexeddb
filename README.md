@@ -3,7 +3,7 @@ mock-indexeddb
 
 a JS mock for indexeddb, with jasmine examples.
 
-The mock uses built-in timers to simulate callbacks. A number of flags can be toggled in the test setup,
+The mock uses built-in timers to simulate async. A number of flags can be toggled in the test setup,
 allowing control over success or failure of certain operations, like saving an item, creating a store,
 or opening a cursor.
 
@@ -24,7 +24,9 @@ Note: This Storage service is not provided; the tests below are specific to a sp
 Getting Started
 ---------------
 
-Download indexeddb.js and put it in test/mock. The default karma.conf.js configuration will include the mock.
+Download indexeddb.js and put it in test/mock. The default karma.conf.js configuration should include the mock. If not, add this line to the files[] configuration:
+
+	'test/mock/**/*.js'
 
 Your Angular service should include a public API to get the indexedDB from window, like this:
 
@@ -139,7 +141,7 @@ The implementation of the cursor looping in the service may look like this:
 			var request = objectStore.openCursor();
 			var values = [];
 			var keys = [];
-				
+
 			request.onsuccess = function(event) {
 					var cursor = event.target.result;
 
