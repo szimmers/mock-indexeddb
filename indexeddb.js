@@ -1,623 +1,636 @@
 /**
  * Mocked indexeddb
+ * 
+ * https://github.com/szimmers/mock-indexeddb
  */
 
+const ERROR_CODE = 1
+const ERROR_MESSAGE = 'fail'
+
 // mock saves objects here
-var mockIndexedDBItems = [];
+const items = []
 
 // used for waitFor()'s in tests
-var mockIndexedDB_openDBSuccess = false;
-var mockIndexedDB_openDBFail = false;
-var mockIndexedDB_openDBAbort = false;
-var mockIndexedDB_openDBBlocked = false;
-var mockIndexedDB_openDBUpgradeNeeded = false;
+let openDBSuccess = false
+let openDBFail = false
+let openDBAbort = false
+let openDBBlocked = false
+let openDBUpgradeNeeded = false
 
-var mockIndexedDB_openCursorSuccess = false;
-var mockIndexedDB_openCursorFail = false;
-var mockIndexedDB_cursorReadingDone = false;
+let openCursorSuccess = false
+let openCursorFail = false
+let cursorReadingDone = false
 
-var mockIndexedDB_saveSuccess = false;
-var mockIndexedDB_saveFail = false;
-var mockIndexedDB_deleteSuccess = false;
-var mockIndexedDB_deleteFail = false;
-var mockIndexedDB_clearSuccess = false;
-var mockIndexedDB_clearFail = false;
-var mockIndexedDB_createStoreSuccess = false;
-var mockIndexedDB_createStoreFail = false;
-var mockIndexedDB_deleteDBSuccess = false;
-var mockIndexedDB_deleteDBFail = false;
+let saveSuccess = false
+let saveFail = false
+let deleteSuccess = false
+let deleteFail = false
+let clearSuccess = false
+let clearFail = false
+let createStoreSuccess = false
+let createStoreFail = false
+let deleteDBSuccess = false
+let deleteDBFail = false
 
 // used for reading objects
-var mockIndexedDB_cursorResultsIndex = 0;
+let cursorResultsIndex = 0
 
 // test flags
-mockIndexedDBTestFlags = {
-	'canOpenDB': true,
-	'openDBShouldBlock': false,
-	'openDBShouldAbort': false,
-	'upgradeNeeded': false,
-	'canReadDB': true,
-	'canSave': true,
-	'canDelete': true,
-	'canClear': true,
-	'canCreateStore': true,
-	'canDeleteDB': true
-};
+const testFlags = {
+  canOpenDB: true,
+  openDBShouldBlock: false,
+  openDBShouldAbort: false,
+  upgradeNeeded: false,
+  canReadDB: true,
+  canSave: true,
+  canDelete: true,
+  canClear: true,
+  canCreateStore: true,
+  canDeleteDB: true
+}
 
 // timers are used to handle callbacks
-var mockIndexedDB_openDBTimer;
-var mockIndexedDB_createObjectStoreTimer;
-var mockIndexedDB_cursorContinueTimer;
-var mockIndexedDB_storeAddTimer;
-var mockIndexedDB_storeDeleteTimer;
-var mockIndexedDB_storeClearTimer;
-var mockIndexedDB_storeOpenCursorTimer;
-var mockIndexedDB_deleteDBTimer;
+let openDBTimer
+let createObjectStoreTimer
+let cursorContinueTimer
+let storeAddTimer
+let storeDeleteTimer
+let storeClearTimer
+let storeOpenCursorTimer
+let deleteDBTimer
 
 /**
  * call this in beforeEach() to reset the mock
  */
-function resetIndexedDBMock() {
-	mockIndexedDBItems.length = 0;
+function reset() {
+  items.length = 0
 
-	mockIndexedDB_openDBSuccess = false;
-	mockIndexedDB_openDBFail = false;
-	mockIndexedDB_openDBAbort = false;
-	mockIndexedDB_openDBBlocked = false;
-	mockIndexedDB_openDBUpgradeNeeded = false;
+  openDBSuccess = false
+  openDBFail = false
+  openDBAbort = false
+  openDBBlocked = false
+  openDBUpgradeNeeded = false
 
-	mockIndexedDB_openCursorSuccess = false;
-	mockIndexedDB_openCursorFail = false;
-	mockIndexedDB_cursorReadingDone = false;
+  openCursorSuccess = false
+  openCursorFail = false
+  cursorReadingDone = false
 
-	mockIndexedDB_saveSuccess = false;
-	mockIndexedDB_saveFail = false;
-	mockIndexedDB_deleteSuccess = false;
-	mockIndexedDB_deleteFail = false;
-	mockIndexedDB_clearSuccess = false;
-	mockIndexedDB_clearFail = false;
-	mockIndexedDB_createStoreSuccess = false;
-	mockIndexedDB_createStoreFail = false;
-	mockIndexedDB_deleteDBSuccess = false;
-	mockIndexedDB_deleteDBFail = false;
+  saveSuccess = false
+  saveFail = false
+  deleteSuccess = false
+  deleteFail = false
+  clearSuccess = false
+  clearFail = false
+  createStoreSuccess = false
+  createStoreFail = false
+  deleteDBSuccess = false
+  deleteDBFail = false
 
-	mockIndexedDB_cursorResultsIndex = 0;
+  cursorResultsIndex = 0
 
-	mockIndexedDBTestFlags.canOpenDB = true;
-	mockIndexedDBTestFlags.openDBShouldBlock = false;
-	mockIndexedDBTestFlags.openDBShouldAbort = false;
-	mockIndexedDBTestFlags.canReadDB = true;
-	mockIndexedDBTestFlags.canSave = true;
-	mockIndexedDBTestFlags.canDelete = true;
-	mockIndexedDBTestFlags.canCreateStore = true;
-	mockIndexedDBTestFlags.canDeleteDB = true;
+  testFlags.canOpenDB = true
+  testFlags.openDBShouldBlock = false
+  testFlags.openDBShouldAbort = false
+  testFlags.canReadDB = true
+  testFlags.canSave = true
+  testFlags.canDelete = true
+  testFlags.canCreateStore = true
+  testFlags.canDeleteDB = true
 
-	clearTimeout(mockIndexedDB_openDBTimer);
-	clearTimeout(mockIndexedDB_createObjectStoreTimer);
-	clearTimeout(mockIndexedDB_cursorContinueTimer);
-	clearTimeout(mockIndexedDB_storeAddTimer);
-	clearTimeout(mockIndexedDB_storeDeleteTimer);
-	clearTimeout(mockIndexedDB_storeClearTimer);
-	clearTimeout(mockIndexedDB_storeOpenCursorTimer);
-	clearTimeout(mockIndexedDB_deleteDBTimer);
+  clearTimeout(openDBTimer)
+  clearTimeout(createObjectStoreTimer)
+  clearTimeout(cursorContinueTimer)
+  clearTimeout(storeAddTimer)
+  clearTimeout(storeDeleteTimer)
+  clearTimeout(storeClearTimer)
+  clearTimeout(storeOpenCursorTimer)
+  clearTimeout(deleteDBTimer)
 }
 
 /**
- * call this in beforeEach() to "save" data before a test
+ * call this in beforeEach() to 'save' data before a test
  */
-function commitIndexedDBMockData(key, value) {
-	var item = {
-		'key': key,
-		'value': value
-	};
+function commitData(key, value) {
+  const item = {
+    key,
+    value
+  }
 
-	mockIndexedDBItems.push(item);
+  items.push(item)
 }
 
 /**
  * the cursor works like an indexeddb one, where calling continue() will provide
- * next item. items must be saved with the commitIndexedDBMockData() method in
+ * next item. items must be saved with the commitData() method in
  * order to be returned by the cursor.
  */
-var mockIndexedDBCursor = {
-	'identity' : 'mockIndexedDBCursor',
+let cursor = {
+  identity: 'cursor',
 
-	'continue' : function() {
-		mockIndexedDB_cursorResultsIndex++;
-		mockIndexedDB_openCursorSuccess = false;
+  continue: function() {
+    cursorResultsIndex++
+    openCursorSuccess = false
 
-		mockIndexedDB_cursorContinueTimer = setTimeout(function() {
-			mockIndexedDBCursorRequest.callSuccessHandler();
-			mockIndexedDB_openCursorSuccess = true;
-		}, 20);
+    cursorContinueTimer = setTimeout(function() {
+      cursorRequest.callSuccessHandler()
+      openCursorSuccess = true
+    }, 20)
 
-		return mockIndexedDBCursorRequest;
-	}
-};
+    return cursorRequest
+  }
+}
 
 /**
  * with each call to continue() to get the cursor, the object will
  * have a key and value property. these are defined by the getters.
  */
-mockIndexedDBCursor.__defineGetter__("key", function() {
-	if (mockIndexedDB_cursorResultsIndex < mockIndexedDBItems.length) {
-		var item = mockIndexedDBItems[mockIndexedDB_cursorResultsIndex];
-		return item.key;
-	}
-	else {
-		return null;
-	}
-});
+cursor.__defineGetter__('key', function() {
+  if (cursorResultsIndex < items.length) {
+    const item = items[cursorResultsIndex]
+    return item.key
+  }
+  else {
+    return null
+  }
+})
 
-mockIndexedDBCursor.__defineGetter__("value", function() {
-	if (mockIndexedDB_cursorResultsIndex < mockIndexedDBItems.length) {
-		var item = mockIndexedDBItems[mockIndexedDB_cursorResultsIndex];
-		return item.value;
-	}
-	else {
-		return null;
-	}
-});
+cursor.__defineGetter__('value', function() {
+  if (cursorResultsIndex < items.length) {
+    const item = items[cursorResultsIndex]
+    return item.value
+  }
+  else {
+    return null
+  }
+})
 
-mockIndexedDBCursor.__defineGetter__("resultCount", function() {
-	return mockIndexedDBItems.length;
-});
+cursor.__defineGetter__('resultCount', function() {
+  return items.length
+})
 
-var mockIndexedDBCursorRequest = {
-	'callSuccessHandler' : function() {
-		if (this.onsuccess !== null) {
+let cursorRequest = {
+  callSuccessHandler: function() {
+    if (this.onsuccess !== null) {
 
-			var cursorToReturn;
+      let cursorToReturn
 
-			if (mockIndexedDB_cursorResultsIndex < mockIndexedDBItems.length) {
-				cursorToReturn = mockIndexedDBCursor;
-				mockIndexedDB_cursorReadingDone = false;
-			}
-			else {
-				cursorToReturn = null;
-				mockIndexedDB_cursorReadingDone = true;
-			}
+      if (cursorResultsIndex < items.length) {
+        cursorToReturn = cursor
+        cursorReadingDone = false
+      }
+      else {
+        cursorToReturn = null
+        cursorReadingDone = true
+      }
 
-			var event = {
-				'type' : 'success',
-				'bubbles' : false,
-				'cancelable' : true,
-				'target' : {
-					'result' : cursorToReturn
-				}
-			};
+      const event = {
+        type: 'success',
+        bubbles: false,
+        cancelable: true,
+        target: {
+          result: cursorToReturn
+        }
+      }
 
-			this.onsuccess(event);
-		}
-	},
+      this.onsuccess(event)
+    }
+  },
 
-	'callErrorHandler' : function() {
-		if (this.onerror !== null) {
+  callErrorHandler: function() {
+    if (this.onerror !== null) {
 
-			var event = {
-				'type' : 'error',
-				'bubbles' : true,
-				'cancelable' : true,
-				'target' : {
-					'errorCode' : 1 // this is a made-up code
-				}
-			};
+      const event = {
+        type: 'error',
+        bubbles: true,
+        cancelable: true,
+        target: {
+          errorCode: ERROR_CODE // this is a made-up code
+        }
+      }
 
-			this.onerror(event);
-		}
-	}
-};
+      this.onerror(event)
+    }
+  }
+}
 
-var mockIndexedDBStoreTransaction = {
-	'callSuccessHandler' : function() {
-		if (this.onsuccess !== null) {
-			var event = new CustomEvent("success", { bubbles: false, cancelable: true });
-			this.onsuccess(event);
-		}
-	},
+let storeTransaction = {
+  callSuccessHandler: function() {
+    if (this.onsuccess !== null) {
+      const event = new CustomEvent('success', { bubbles: false, cancelable: true })
+      this.onsuccess(event)
+    }
+  },
 
-	'callErrorHandler' : function() {
-		if (this.onerror !== null) {
-			var event = {
-				'type' : 'error',
-				'bubbles' : true,
-				'cancelable' : true,
-				'target' : {
-					'errorCode' : 1 // this is a made-up code
-				}
-			};
-			this.onerror(event);
-		}
-	}
-};
+  callErrorHandler: function() {
+    if (this.onerror !== null) {
+      const event = {
+        type: 'error',
+        bubbles: true,
+        cancelable: true,
+        target: {
+          errorCode: ERROR_CODE // this is a made-up code
+        }
+      }
+      this.onerror(event)
+    }
+  }
+}
 
-var mockIndexedDBStore = {
-	'identity' : 'mockedStore',
+let store = {
+  identity: 'store',
 
-	// add returns a different txn than delete does. in indexedDB, the listeners are
-	// attached to the txn that returned the store.
-	'add' : function(data) {
-		if (mockIndexedDBTestFlags.canSave === true) {
-			mockIndexedDBItems.push(data);
-			mockIndexedDB_storeAddTimer = setTimeout(function() {
-				mockIndexedDBTransaction.callCompleteHandler();
-				mockIndexedDB_saveSuccess = true;
-			}, 20);
-		}
-		else {
-			mockIndexedDB_storeAddTimer = setTimeout(function() {
-				mockIndexedDBTransaction.callErrorHandler();
-				mockIndexedDB_saveFail = true;
-			}, 20);
-		}
+  // add returns a different txn than delete does. in indexedDB, the listeners are
+  // attached to the txn that returned the store.
+  add: function(data) {
+    if (testFlags.canSave === true) {
+      items.push(data)
+      storeAddTimer = setTimeout(function() {
+        transaction.callCompleteHandler()
+        saveSuccess = true
+      }, 20)
+    }
+    else {
+      storeAddTimer = setTimeout(function() {
+        transaction.callErrorHandler()
+        saveFail = true
+      }, 20)
+    }
 
-		return mockIndexedDBTransaction;
-	},
+    return transaction
+  },
 
-	// for now, treating put just like an add.
-	// TODO: do an update instead of adding
-	'put' : function(data) {
-		if (mockIndexedDBTestFlags.canSave === true) {
-			mockIndexedDBItems.push(data);
-			mockIndexedDB_storeAddTimer = setTimeout(function() {
-				mockIndexedDBTransaction.callCompleteHandler();
-				mockIndexedDB_saveSuccess = true;
-			}, 20);
-		}
-		else {
-			mockIndexedDB_storeAddTimer = setTimeout(function() {
-				mockIndexedDBTransaction.callErrorHandler();
-				mockIndexedDB_saveFail = true;
-			}, 20);
-		}
+  // for now, treating put just like an add.
+  // TODO: do an update instead of adding
+  put: function(data) {
+    if (testFlags.canSave === true) {
+      items.push(data)
+      storeAddTimer = setTimeout(function() {
+        transaction.callCompleteHandler()
+        saveSuccess = true
+      }, 20)
+    }
+    else {
+      storeAddTimer = setTimeout(function() {
+        transaction.callErrorHandler()
+        saveFail = true
+      }, 20)
+    }
 
-		return mockIndexedDBTransaction;
-	},
+    return transaction
+  },
 
-	// for delete, the listeners are attached to a request returned from the store.
-	'delete' : function(data_id) {
-		if (mockIndexedDBTestFlags.canDelete === true) {
-			mockIndexedDB_storeDeleteTimer = setTimeout(function() {
-				mockIndexedDBStoreTransaction.callSuccessHandler();
-				mockIndexedDB_deleteSuccess = true;
-			}, 20);
-		}
-		else {
-			mockIndexedDB_storeDeleteTimer = setTimeout(function() {
-				mockIndexedDBStoreTransaction.callErrorHandler();
-				mockIndexedDB_deleteFail = true;
-			}, 20);
-		}
+  // for delete, the listeners are attached to a request returned from the store.
+  delete: function(data_id) {
+    if (testFlags.canDelete === true) {
+      storeDeleteTimer = setTimeout(function() {
+        storeTransaction.callSuccessHandler()
+        deleteSuccess = true
+      }, 20)
+    }
+    else {
+      storeDeleteTimer = setTimeout(function() {
+        storeTransaction.callErrorHandler()
+        deleteFail = true
+      }, 20)
+    }
 
-		return mockIndexedDBStoreTransaction;
-	},
+    return storeTransaction
+  },
 
-	// for clear, the listeners are attached to a request returned from the store.
-	'clear' : function(data_id) {
-		if (mockIndexedDBTestFlags.canClear === true) {
-			mockIndexedDB_storeClearTimer = setTimeout(function() {
-				mockIndexedDBStoreTransaction.callSuccessHandler();
-				mockIndexedDB_clearSuccess = true;
-			}, 20);
-		}
-		else {
-			mockIndexedDB_storeClearTimer = setTimeout(function() {
-				mockIndexedDBStoreTransaction.callErrorHandler();
-				mockIndexedDB_clearFail = true;
-			}, 20);
-		}
+  // for clear, the listeners are attached to a request returned from the store.
+  clear: function(data_id) {
+    if (testFlags.canClear === true) {
+      storeClearTimer = setTimeout(function() {
+        storeTransaction.callSuccessHandler()
+        clearSuccess = true
+      }, 20)
+    }
+    else {
+      storeClearTimer = setTimeout(function() {
+        storeTransaction.callErrorHandler()
+        clearFail = true
+      }, 20)
+    }
 
-		return mockIndexedDBStoreTransaction;
-	},
+    return storeTransaction
+  },
 
-	'createIndex' : function(key, key, params) {
+  createIndex: function(key, params) {
 
-	},
+  },
 
-	'callSuccessHandler' : function() {
-		if (this.onsuccess !== null) {
-			var event = new CustomEvent("success", { bubbles: false, cancelable: true });
-			this.onsuccess(event);
-		}
-	},
+  callSuccessHandler: function() {
+    if (this.onsuccess !== null) {
+      const event = new CustomEvent('success', { bubbles: false, cancelable: true })
+      this.onsuccess(event)
+    }
+  },
 
-	'callErrorHandler' : function() {
-		if (this.onerror !== null) {
-			var event = {
-				'type' : 'error',
-				'bubbles' : true,
-				'cancelable' : true,
-				'target' : {
-					'errorCode' : 1 // this is a made-up code
-				}
-			};
-			this.onerror(event);
-		}
-	},
+  callErrorHandler: function() {
+    if (this.onerror !== null) {
+      const event = {
+        type: 'error',
+        bubbles: true,
+        cancelable: true,
+        target: {
+          errorCode: ERROR_CODE // this is a made-up code
+        }
+      }
+      this.onerror(event)
+    }
+  },
 
-	'openCursor' : function() {
-		if (mockIndexedDBTestFlags.canReadDB === true) {
-			mockIndexedDB_storeOpenCursorTimer = setTimeout(function() {
-				mockIndexedDBCursorRequest.callSuccessHandler();
-				mockIndexedDB_openCursorSuccess = true;
-			}, 20);
-		}
-		else {
-			mockIndexedDB_storeOpenCursorTimer = setTimeout(function() {
-				mockIndexedDBCursorRequest.callErrorHandler();
-				mockIndexedDB_openCursorFail = true;
-			}, 20);
-		}
+  openCursor: function() {
+    if (testFlags.canReadDB === true) {
+      storeOpenCursorTimer = setTimeout(function() {
+        cursorRequest.callSuccessHandler()
+        openCursorSuccess = true
+      }, 20)
+    }
+    else {
+      storeOpenCursorTimer = setTimeout(function() {
+        cursorRequest.callErrorHandler()
+        openCursorFail = true
+      }, 20)
+    }
 
-		return mockIndexedDBCursorRequest;
-	}
-};
+    return cursorRequest
+  }
+}
 
-var mockIndexedDBTransaction = {
-	'objectStore' : function(name) {
-		return mockIndexedDBStore;
-	},
+let transaction = {
+  objectStore: function(name) {
+    return store
+  },
 
-	'callCompleteHandler' : function() {
-		if (this.oncomplete !== null) {
-			var event = new CustomEvent("complete", { bubbles: false, cancelable: true });
-			this.oncomplete(event);
-		}
-	},
+  callCompleteHandler: function() {
+    if (this.oncomplete !== null) {
+      const event = new CustomEvent('complete', { bubbles: false, cancelable: true })
+      this.oncomplete(event)
+    }
+  },
 
-	'callErrorHandler' : function() {
-		if (this.onerror !== null) {
-			var event = {
-				'type' : 'error',
-				'bubbles' : true,
-				'cancelable' : true,
-				'target' : {
-					'errorCode' : 1 // this is a made-up code
-				}
-			};
-			this.onerror(event);
-		}
-	}
-};
+  callErrorHandler: function() {
+    if (this.onerror !== null) {
+      const event = {
+        type: 'error',
+        bubbles: true,
+        cancelable: true,
+        target: {
+          errorCode: ERROR_CODE // this is a made-up code
+        }
+      }
+      this.onerror(event)
+    }
+  }
+}
 
-var mockIndexedDBDatabase = {
-	'transaction' : function(stores, access) {
-		return mockIndexedDBTransaction;
-	},
+let database = {
+  transaction: function(stores, access) {
+    return transaction
+  },
 
-	'close' : function() {},
+  close: function() {},
 
-	'objectStoreNames' : {
-		'contains' : function(name) {
-			return false;
-		}
-	},
+  objectStoreNames: {
+    contains: function(name) {
+      return false
+    }
+  },
 
-	'createObjectStore' : function(name, params) {
-		if (mockIndexedDBTestFlags.canCreateStore === true) {
-			mockIndexedDB_createObjectStoreTimer = setTimeout(function() {
-				mockIndexedDBStore.callSuccessHandler();
-				mockIndexedDB_createStoreSuccess = true;
-			}, 20);
-		}
-		else {
-			mockIndexedDB_createObjectStoreTimer = setTimeout(function() {
-				mockIndexedDBStore.callErrorHandler();
-				mockIndexedDB_createStoreFail = true;
-			}, 20);
-		}
+  createObjectStore: function(name, params) {
+    if (testFlags.canCreateStore === true) {
+      createObjectStoreTimer = setTimeout(function() {
+        store.callSuccessHandler()
+        createStoreSuccess = true
+      }, 20)
+    }
+    else {
+      createObjectStoreTimer = setTimeout(function() {
+        store.callErrorHandler()
+        createStoreFail = true
+      }, 20)
+    }
 
-		return mockIndexedDBStore;
-	}
-};
+    return store
+  }
+}
 
-var mockIndexedDBOpenDBRequest = {
-	'callSuccessHandler' : function() {
-		if (this.onsuccess !== null) {
-			var event = document.createEvent("CustomEvent");
-			event.initCustomEvent("success", false, false, { bubbles: false, cancelable: true });
-			this.onsuccess(event);
-		}
-	},
+let openDBRequest = {
+  callSuccessHandler: function() {
+    if (this.onsuccess !== null) {
+      const event = document.createEvent('CustomEvent')
+      event.initCustomEvent('success', false, false, { bubbles: false, cancelable: true })
+      this.onsuccess(event)
+    }
+  },
 
-	'callErrorHandler' : function() {
-		if (this.onerror !== null) {
-			var event = {
-				'type' : 'error',
-				'bubbles' : true,
-				'cancelable' : true,
-				'target' : {
-					'errorCode' : 1, // this is a made-up code
-					'error' : {
-						'message' : 'fail' // this is a made-up message
-					}
-				}
-			};
-			this.onerror(event);
-		}
-	},
+  callErrorHandler: function() {
+    if (this.onerror !== null) {
+      const event = {
+        type: 'error',
+        bubbles: true,
+        cancelable: true,
+        target: {
+          errorCode: ERROR_CODE, // this is a made-up code
+          error: {
+            message: ERROR_MESSAGE // this is a made-up message
+          }
+        }
+      }
+      this.onerror(event)
+    }
+  },
 
-	'callAbortHandler' : function() {
-		if (this.onblocked !== null) {
-			var event = {
-				'type' : 'error',
-				'bubbles' : true,
-				'cancelable' : true,
-				'target' : {
-					'errorCode' : 1, // this is a made-up code
-					'error' : {
-						'message' : 'fail' // this is a made-up message
-					}
-				}
-			};
-			this.onblocked(event);
-		}
-	},
+  callAbortHandler: function() {
+    if (this.onblocked !== null) {
+      const event = {
+        type: 'error',
+        bubbles: true,
+        cancelable: true,
+        target: {
+          errorCode: ERROR_CODE, // this is a made-up code
+          error: {
+            message: ERROR_MESSAGE // this is a made-up message
+          }
+        }
+      }
+      this.onblocked(event)
+    }
+  },
 
-	'callBlockedHandler' : function() {
-		if (this.onabort !== null) {
-			var event = {
-				'type' : 'error',
-				'bubbles' : true,
-				'cancelable' : true,
-				'target' : {
-					'errorCode' : 1, // this is a made-up code
-					'error' : {
-						'message' : 'fail' // this is a made-up message
-					}
-				}
-			};
-			this.onabort(event);
-		}
-	},
+  callBlockedHandler: function() {
+    if (this.onabort !== null) {
+      const event = {
+        type: 'error',
+        bubbles: true,
+        cancelable: true,
+        target: {
+          errorCode: ERROR_CODE, // this is a made-up code
+          error: {
+            message: ERROR_MESSAGE // this is a made-up message
+          }
+        }
+      }
+      this.onabort(event)
+    }
+  },
 
-	'callUpgradeNeeded' : function() {
-		if (this.onupgradeneeded !== null) {
-			var event = {
-				'type' : 'upgradeneeded',
-				'bubbles' : false,
-				'cancelable' : true,
-				'target' : {
-					'result' : mockIndexedDBDatabase,
-					'transaction' : {
-						'abort': function() {
-							mockIndexedDBTestFlags.openDBShouldAbort = true;
-						}
-					}
-				}
-			};
-			this.onupgradeneeded(event);
-		}
-	},
+  callUpgradeNeeded: function() {
+    if (this.onupgradeneeded !== null) {
+      const event = {
+        type: 'upgradeneeded',
+        bubbles: false,
+        cancelable: true,
+        target: {
+          result: database,
+          transaction: {
+            abort: function() {
+              testFlags.openDBShouldAbort = true
+            }
+          }
+        }
+      }
+      this.onupgradeneeded(event)
+    }
+  },
 
-	'result' : mockIndexedDBDatabase
-};
+  result: database
+}
 
-var mockIndexedDBDeleteDBRequest = {
-	'callSuccessHandler' : function() {
-		if (this.onsuccess !== null) {
-			var event = new CustomEvent("success", { bubbles: false, cancelable: true });
-			this.onsuccess(event);
-		}
-	},
+const deleteDBRequest = {
+  callSuccessHandler: function() {
+    if (this.onsuccess !== null) {
+      const event = new CustomEvent('success', { bubbles: false, cancelable: true })
+      this.onsuccess(event)
+    }
+  },
 
-	'callErrorHandler' : function() {
-		if (this.onerror !== null) {
-			var event = {
-				'type' : 'error',
-				'bubbles' : true,
-				'cancelable' : true,
-				'target' : {
-					'errorCode' : 1, // this is a made-up code
-					'error' : {
-						'message' : 'fail' // this is a made-up message
-					}
-				}
-			};
-			this.onerror(event);
-		}
-	},
+  callErrorHandler: function() {
+    if (this.onerror !== null) {
+      const event = {
+        type: 'error',
+        bubbles: true,
+        cancelable: true,
+        target: {
+          errorCode: ERROR_CODE, // this is a made-up code
+          error: {
+            message: ERROR_MESSAGE // this is a made-up message
+          }
+        }
+      }
+      this.onerror(event)
+    }
+  },
 
-	'callAbortHandler' : function() {
-		if (this.onblocked !== null) {
-			var event = {
-				'type' : 'error',
-				'bubbles' : true,
-				'cancelable' : true,
-				'target' : {
-					'errorCode' : 1, // this is a made-up code
-					'error' : {
-						'message' : 'fail' // this is a made-up message
-					}
-				}
-			};
-			this.onblocked(event);
-		}
-	},
+  callAbortHandler: function() {
+    if (this.onblocked !== null) {
+      const event = {
+        type: 'error',
+        bubbles: true,
+        cancelable: true,
+        target: {
+          errorCode: ERROR_CODE, // this is a made-up code
+          error: {
+            message: ERROR_MESSAGE // this is a made-up message
+          }
+        }
+      }
+      this.onblocked(event)
+    }
+  },
 
-	'callBlockedHandler' : function() {
-		if (this.onabort !== null) {
-			var event = {
-				'type' : 'error',
-				'bubbles' : true,
-				'cancelable' : true,
-				'target' : {
-					'errorCode' : 1, // this is a made-up code
-					'error' : {
-						'message' : 'fail' // this is a made-up message
-					}
-				}
-			};
-			this.onabort(event);
-		}
-	},
+  callBlockedHandler: function() {
+    if (this.onabort !== null) {
+      const event = {
+        type: 'error',
+        bubbles: true,
+        cancelable: true,
+        target: {
+          errorCode: ERROR_CODE, // this is a made-up code
+          error: {
+            message: ERROR_MESSAGE // this is a made-up message
+          }
+        }
+      }
+      this.onabort(event)
+    }
+  },
 
-	'result' : {}
-};
+  result: {}
+}
 
 /**
  * this mocks the window.indexedDB object. assuming a method that returns that object, this mock
  * object can be substituted like this:
  *
- * spyOn(service, 'getIndexedDBReference').andReturn(mockIndexedDB);
+ * spyOn(service, 'getIndexedDBReference').andReturn(mockIndexedDB)
  */
-var mockIndexedDB = {
-	'identity' : 'mockedIndexDB',
+const mockIndexedDB = {
+  identity: 'mockedIndexDB',
 
-	// note: the mock does not simulate separate stores, so dbname is ignored
-	'open' : function(dbname, version) {
-		if (mockIndexedDBTestFlags.openDBShouldBlock === true) {
-			mockIndexedDB_openDBTimer = setTimeout(function() {
-				mockIndexedDBOpenDBRequest.callBlockedHandler();
-				mockIndexedDB_openDBBlocked = true;
-			}, 20);
-		}
-		else if (mockIndexedDBTestFlags.openDBShouldAbort === true) {
-			mockIndexedDB_openDBTimer = setTimeout(function() {
-				mockIndexedDBOpenDBRequest.callAbortHandler();
-				mockIndexedDB_openDBAbort = true;
-			}, 20);
-		}
-		else if (mockIndexedDBTestFlags.upgradeNeeded === true) {
-			mockIndexedDB_openDBTimer = setTimeout(function() {
-				mockIndexedDBOpenDBRequest.callUpgradeNeeded();
-				mockIndexedDB_openDBUpgradeNeeded = true;
-			}, 20);
-		}
-		// these are order dependent, so we don't have to set so many
-		// flags in the test. can leave 'canOpenDB' in its default
-		// true state, so long as the other fail vars are checked first.
-		else if (mockIndexedDBTestFlags.canOpenDB === true) {
-			mockIndexedDB_openDBTimer = setTimeout(function() {
-				mockIndexedDBOpenDBRequest.callSuccessHandler();
-				mockIndexedDB_openDBSuccess = true;
-			}, 20);
-		}
-		else {
-			mockIndexedDB_openDBTimer = setTimeout(function() {
-				mockIndexedDBOpenDBRequest.callErrorHandler();
-				mockIndexedDB_openDBFail = true;
-			}, 20);
-		}
+  // note: the mock does not simulate separate stores, so dbname is ignored
+  open: function(dbname, version) {
+    if (testFlags.openDBShouldBlock === true) {
+      openDBTimer = setTimeout(function() {
+        openDBRequest.callBlockedHandler()
+        openDBBlocked = true
+      }, 20)
+    }
+    else if (testFlags.openDBShouldAbort === true) {
+      openDBTimer = setTimeout(function() {
+        openDBRequest.callAbortHandler()
+        openDBAbort = true
+      }, 20)
+    }
+    else if (testFlags.upgradeNeeded === true) {
+      openDBTimer = setTimeout(function() {
+        openDBRequest.callUpgradeNeeded()
+        openDBUpgradeNeeded = true
+      }, 20)
+    }
+    // these are order dependent, so we don't have to set so many
+    // flags in the test. can leave 'canOpenDB' in its default
+    // true state, so long as the other fail vars are checked first.
+    else if (testFlags.canOpenDB === true) {
+      openDBTimer = setTimeout(function() {
+        openDBRequest.callSuccessHandler()
+        openDBSuccess = true
+      }, 20)
+    }
+    else {
+      openDBTimer = setTimeout(function() {
+        openDBRequest.callErrorHandler()
+        openDBFail = true
+      }, 20)
+    }
 
-		return mockIndexedDBOpenDBRequest;
-	},
+    return openDBRequest
+  },
 
-	'deleteDatabase': function(dbname) {
-		if (mockIndexedDBTestFlags.canDeleteDB === true) {
-			mockIndexedDB_deleteDBTimer = setTimeout(function() {
-				mockIndexedDBDeleteDBRequest.callSuccessHandler();
-				mockIndexedDB_deleteDBSuccess = true;
-			}, 20);
-		}
-		else {
-			mockIndexedDB_deleteDBTimer = setTimeout(function() {
-				mockIndexedDBDeleteDBRequest.callErrorHandler();
-				mockIndexedDB_deleteDBFail = true;
-			}, 20);
-		}
+  deleteDatabase: function(dbname) {
+    if (testFlags.canDeleteDB === true) {
+      deleteDBTimer = setTimeout(function() {
+        deleteDBRequest.callSuccessHandler()
+        deleteDBSuccess = true
+      }, 20)
+    }
+    else {
+      deleteDBTimer = setTimeout(function() {
+        deleteDBRequest.callErrorHandler()
+        deleteDBFail = true
+      }, 20)
+    }
 
-		return mockIndexedDBDeleteDBRequest;
-	}
+    return deleteDBRequest
+  }
 
-};
+}
+
+// Set window property to mock
+window.indexedDB = mockIndexedDB
+
+export default {
+  reset,
+  commitData
+}
